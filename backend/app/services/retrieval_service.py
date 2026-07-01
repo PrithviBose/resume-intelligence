@@ -1,9 +1,13 @@
 import uuid
 from dataclasses import dataclass
 
-from app.models.embedding import StoredChunk, StoredResume
-from app.services.embedding_service import embed_query
+from app.lib.chroma_client import get_collection
+from app.lib.logger import get_logger, log_event
+from app.models.embedding import StoredResume
 from app.services.chunking_service import TextChunk
+from app.services.embedding_service import embed_query
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -15,10 +19,7 @@ class SearchHit:
     score: float
 
 
-class EmbeddingStore:
-    def __init__(self) -> None:
-        self._resumes: dict[str, StoredResume] = {}
-
+class ChromaEmbeddingStore:
     def save(
         self,
         *,
@@ -29,50 +30,88 @@ class EmbeddingStore:
         embeddings: list[list[float]],
     ) -> str:
         resume_id = str(uuid.uuid4())
-        stored_chunks = [
-            StoredChunk(
-                index=chunk.index,
-                text=chunk.text,
-                start_char=chunk.start_char,
-                end_char=chunk.end_char,
-                embedding=embedding,
-            )
-            for chunk, embedding in zip(chunks, embeddings, strict=True)
-        ]
-        self._resumes[resume_id] = StoredResume(
+        collection = get_collection()
+
+        collection.add(
+            ids=[f"{resume_id}_{chunk.index}" for chunk in chunks],
+            embeddings=embeddings,
+            documents=[chunk.text for chunk in chunks],
+            metadatas=[
+                {
+                    "resume_id": resume_id,
+                    "chunk_index": chunk.index,
+                    "start_char": chunk.start_char,
+                    "end_char": chunk.end_char,
+                    "filename": filename,
+                    "model_name": model_name,
+                    "embedding_dimension": embedding_dimension,
+                }
+                for chunk in chunks
+            ],
+        )
+
+        log_event(
+            logger,
+            "chroma.saved",
             resume_id=resume_id,
             filename=filename,
-            model_name=model_name,
-            embedding_dimension=embedding_dimension,
-            chunks=stored_chunks,
+            chunk_count=len(chunks),
+            collection=collection.name,
         )
         return resume_id
 
     def get(self, resume_id: str) -> StoredResume | None:
-        return self._resumes.get(resume_id)
+        collection = get_collection()
+        result = collection.get(
+            where={"resume_id": resume_id},
+            limit=1,
+            include=["metadatas"],
+        )
+
+        if not result["ids"]:
+            return None
+
+        metadata = result["metadatas"][0]
+        return StoredResume(
+            resume_id=resume_id,
+            filename=str(metadata.get("filename", "")),
+            model_name=str(metadata.get("model_name", "")),
+            embedding_dimension=int(metadata.get("embedding_dimension", 0)),
+            chunks=[],
+        )
 
     def search(self, resume_id: str, query: str, top_k: int = 3) -> list[SearchHit]:
-        resume = self._resumes.get(resume_id)
-        if resume is None:
+        if self.get(resume_id) is None:
             return []
 
+        collection = get_collection()
         query_vector = embed_query(query)
-        scored_chunks = [
-            SearchHit(
-                chunk_index=chunk.index,
-                text=chunk.text,
-                start_char=chunk.start_char,
-                end_char=chunk.end_char,
-                score=_dot_product(query_vector, chunk.embedding),
+        results = collection.query(
+            query_embeddings=[query_vector],
+            n_results=top_k,
+            where={"resume_id": resume_id},
+            include=["documents", "metadatas", "distances"],
+        )
+
+        hits: list[SearchHit] = []
+        documents = results["documents"][0]
+        metadatas = results["metadatas"][0]
+        distances = results["distances"][0]
+
+        for document, metadata, distance in zip(
+            documents, metadatas, distances, strict=True
+        ):
+            hits.append(
+                SearchHit(
+                    chunk_index=int(metadata["chunk_index"]),
+                    text=document,
+                    start_char=int(metadata["start_char"]),
+                    end_char=int(metadata["end_char"]),
+                    score=round(1 - distance, 4),
+                )
             )
-            for chunk in resume.chunks
-        ]
-        scored_chunks.sort(key=lambda hit: hit.score, reverse=True)
-        return scored_chunks[:top_k]
+
+        return hits
 
 
-def _dot_product(left: list[float], right: list[float]) -> float:
-    return sum(a * b for a, b in zip(left, right, strict=True))
-
-
-embedding_store = EmbeddingStore()
+embedding_store = ChromaEmbeddingStore()

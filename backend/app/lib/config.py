@@ -43,6 +43,13 @@ class Settings:
     azure_openai_api_version: str = os.getenv(
         "AZURE_OPENAI_API_VERSION", "2025-04-01-preview"
     )
+    chroma_host: str = os.getenv("CHROMA_HOST", "localhost")
+    chroma_port: int = int(os.getenv("CHROMA_PORT", "8001"))
+    chroma_collection_name: str = os.getenv(
+        "CHROMA_COLLECTION_NAME", "knowledge-base"
+    )
+    chroma_tenant: str = os.getenv("CHROMA_TENANT", "default_tenant")
+    chroma_database: str = os.getenv("CHROMA_DATABASE", "default_database")
 
 
 settings = Settings()

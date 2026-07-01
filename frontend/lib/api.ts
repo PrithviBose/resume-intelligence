@@ -1,4 +1,4 @@
-import type { ParseResult, SearchResult } from "./types";
+import type { ParseResult, SearchResult, UsersListResponse } from "./types";
 
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
@@ -45,6 +45,21 @@ export async function searchResume(
       typeof error?.detail === "string"
         ? error.detail
         : "Failed to search resume";
+    throw new Error(detail);
+  }
+
+  return response.json();
+}
+
+export async function fetchUsers(): Promise<UsersListResponse> {
+  const response = await fetch(`${API_BASE_URL}/api/users`);
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => null);
+    const detail =
+      typeof error?.detail === "string"
+        ? error.detail
+        : "Failed to load candidates";
     throw new Error(detail);
   }
 

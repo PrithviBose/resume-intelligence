@@ -14,3 +14,14 @@ class UserProfileSchema(BaseModel):
     email: str | None
     current_company: str | None
     years_of_experience: float | None
+
+
+class UserListItem(BaseModel):
+    user_name: str | None
+    email: str | None
+    current_company: str | None
+    resume_id: str
+
+
+class UsersListResponse(BaseModel):
+    users: list[UserListItem]

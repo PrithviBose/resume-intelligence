@@ -43,3 +43,30 @@ export type SearchResult = {
   query: string;
   results: SearchHit[];
 };
+
+export type ChatRole = "user" | "assistant";
+
+export type ChatMessage = {
+  id: string;
+  role: ChatRole;
+  content: string;
+  timestamp: Date;
+};
+
+export type ChatCandidate = {
+  resumeId: string;
+  userName: string | null;
+  email: string | null;
+  currentCompany: string | null;
+};
+
+export type UserListItem = {
+  user_name: string | null;
+  email: string | null;
+  current_company: string | null;
+  resume_id: string;
+};
+
+export type UsersListResponse = {
+  users: UserListItem[];
+};

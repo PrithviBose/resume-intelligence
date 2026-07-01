@@ -1,0 +1,68 @@
+# Resume Intelligence — local infrastructure (Postgres, Chroma, Chroma Admin)
+#
+# CLI: docker compose up -d
+#
+# Run the FastAPI backend locally:
+#   cd backend && uvicorn app.main:app --reload --port 8000
+#
+# Services:
+# - Postgres: localhost:5432
+# - Chroma: localhost:8001
+# - Chroma Admin UI: http://localhost:3001
+
+name: resume-intelligence
+
+services:
+  postgres:
+    build:
+     context: ./postgres
+    image: resume-postgres:latest
+    container_name: resume-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: resume_intelligence
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d resume_intelligence"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: resume-chroma
+    restart: unless-stopped
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/data
+
+  chroma-admin:
+    build:
+      context: ./docker
+      dockerfile: chroma-admin.Dockerfile
+    image: resume-chroma-admin:local
+    container_name: chroma-admin
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    depends_on:
+      - chroma
+
+networks:
+  default:
+    name: resume-net
+
+volumes:
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${POSTGRES_DATA_DIR:-./docker/postgres-data}
+  chroma_data:

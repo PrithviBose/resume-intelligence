@@ -20,6 +20,12 @@
 .idea/
 *.log
 
+# Docker local data
+docker/postgres-data/
+
+# Vendored docker build context (clone with: git clone --depth 1 https://github.com/flanker/chromadb-admin.git docker/chromadb-admin)
+docker/chromadb-admin/
+
 # Local docs
 *.docx
 ~$*

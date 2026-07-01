@@ -111,13 +111,31 @@ async def parse_resume(file: UploadFile) -> ParseResult:
     chunk_texts = [chunk.text for chunk in chunks]
     embeddings = embed_documents(chunk_texts)
     embedding_dimension = get_embedding_dimension()
-    resume_id = embedding_store.save(
-        filename=filename,
-        model_name=settings.embedding_model_name,
-        embedding_dimension=embedding_dimension,
-        chunks=chunks,
-        embeddings=embeddings,
-    )
+    try:
+        resume_id = embedding_store.save(
+            filename=filename,
+            model_name=settings.embedding_model_name,
+            embedding_dimension=embedding_dimension,
+            chunks=chunks,
+            embeddings=embeddings,
+        )
+    except Exception as exc:
+        log_event(
+            logger,
+            "parse.failed",
+            level=logging.ERROR,
+            filename=filename,
+            reason="chroma_error",
+            error=str(exc),
+        )
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Failed to store embeddings in ChromaDB. "
+                "Ensure Chroma is running on "
+                f"{settings.chroma_host}:{settings.chroma_port}."
+            ),
+        ) from exc
     embed_duration_ms = round((time.perf_counter() - embed_start) * 1000, 2)
 
     llm_start = time.perf_counter()
