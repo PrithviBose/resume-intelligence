@@ -50,6 +50,7 @@ class Settings:
     )
     chroma_tenant: str = os.getenv("CHROMA_TENANT", "default_tenant")
     chroma_database: str = os.getenv("CHROMA_DATABASE", "default_database")
+    job_description: str = os.getenv("JOB_DESCRIPTION", "")
 
 
 settings = Settings()

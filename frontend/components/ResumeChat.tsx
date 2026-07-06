@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { fetchUsers } from "@/lib/api";
+import { fetchUsers, queryResume } from "@/lib/api";
 import type { ChatCandidate, ChatMessage, UserListItem } from "@/lib/types";
 
+import PromptChainSteps from "./PromptChainSteps";
 import ResultCard from "./ResultCard";
 
 const SUGGESTED_QUESTIONS = [
@@ -14,12 +15,17 @@ const SUGGESTED_QUESTIONS = [
   "Do they have leadership or management experience?",
 ];
 
-function createMessage(role: ChatMessage["role"], content: string): ChatMessage {
+function createMessage(
+  role: ChatMessage["role"],
+  content: string,
+  extra?: Pick<ChatMessage, "chain" | "sources">,
+): ChatMessage {
   return {
     id: crypto.randomUUID(),
     role,
     content,
     timestamp: new Date(),
+    ...extra,
   };
 }
 
@@ -38,12 +44,19 @@ function toChatCandidate(user: UserListItem): ChatCandidate {
   };
 }
 
-function mockAssistantReply(question: string, candidate?: ChatCandidate | null): string {
-  const name = candidate?.userName ?? "the selected candidate";
+function MaximizeIcon() {
   return (
-    `This is a preview response for: "${question}"\n\n` +
-    `Once the chat API is connected, answers about ${name}'s resume will be generated ` +
-    `using retrieved resume context and an LLM.`
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5" aria-hidden="true">
+      <path d="M13.28 7.78l3.22-3.22v2.69a.75.75 0 0 0 1.5 0v-4.5a.75.75 0 0 0-.75-.75h-4.5a.75.75 0 0 0 0 1.5h2.69l-3.22 3.22a.75.75 0 0 0 1.06 1.06ZM2 17.25v-4.5a.75.75 0 0 1 1.5 0v2.69l3.22-3.22a.75.75 0 0 1 1.06 1.06L4.56 16.5h2.69a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1-.75-.75Z" />
+    </svg>
+  );
+}
+
+function MinimizeIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-3.5 w-3.5" aria-hidden="true">
+      <path d="M3.28 2.22a.75.75 0 0 0-1.06 1.06L7.44 8.5H4.75a.75.75 0 0 0 0 1.5h4.5A.75.75 0 0 0 10 9.25v-4.5a.75.75 0 0 0-1.5 0v2.69L3.28 2.22ZM13.5 10.75a.75.75 0 0 0 0 1.5h2.69l-5.22 5.22a.75.75 0 1 0 1.06 1.06l5.22-5.22v2.69a.75.75 0 0 0 1.5 0v-4.5a.75.75 0 0 0-.75-.75h-4.5Z" />
+    </svg>
   );
 }
 
@@ -55,6 +68,7 @@ export default function ResumeChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [maximized, setMaximized] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -100,6 +114,14 @@ export default function ResumeChat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
+  // Close on Escape key when maximized
+  useEffect(() => {
+    if (!maximized) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setMaximized(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [maximized]);
+
   const handleCandidateChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       setSelectedResumeId(e.target.value);
@@ -119,16 +141,29 @@ export default function ResumeChat() {
       setInput("");
       setIsLoading(true);
 
-      // UI-only placeholder until the chat API is wired up.
-      await new Promise((resolve) => setTimeout(resolve, 900));
-
-      const assistantMessage = createMessage(
-        "assistant",
-        mockAssistantReply(trimmed, selectedCandidate),
-      );
-      setMessages((prev) => [...prev, assistantMessage]);
-      setIsLoading(false);
-      inputRef.current?.focus();
+      try {
+        const result = await queryResume(
+          selectedCandidate.resumeId,
+          trimmed,
+          selectedCandidate.userName,
+        );
+        const assistantMessage = createMessage("assistant", result.answer, {
+          chain: result.chain,
+          sources: result.sources,
+        });
+        setMessages((prev) => [...prev, assistantMessage]);
+      } catch (error) {
+        const assistantMessage = createMessage(
+          "assistant",
+          error instanceof Error
+            ? error.message
+            : "Something went wrong. Please try again.",
+        );
+        setMessages((prev) => [...prev, assistantMessage]);
+      } finally {
+        setIsLoading(false);
+        inputRef.current?.focus();
+      }
     },
     [isLoading, selectedCandidate],
   );
@@ -166,14 +201,16 @@ export default function ResumeChat() {
 
   const chatDisabled =
     candidatesLoading || !!candidatesError || !selectedCandidate || candidates.length === 0;
-  return (
-    <ResultCard title="Resume Chat">
-      <div className="mb-4 space-y-4">
-        <p className="text-xs text-slate-400">
-          Select a candidate and ask questions about their resume. Answers will
-          use semantic search + LLM once the backend is connected.
-        </p>
 
+  // Shared inner content — used in both normal and maximized views
+  const inner = (
+    <>
+      {/* Candidate selector + controls */}
+      <div className="mb-4 space-y-3">
+        <p className="text-xs text-slate-400">
+          Select a candidate and ask questions about their resume. Answers use
+          semantic search over resume chunks and an LLM.
+        </p>
         <div>
           <label
             htmlFor="chat-candidate"
@@ -189,7 +226,8 @@ export default function ResumeChat() {
             <p className="text-sm text-slate-500">
               No candidates available yet. Upload a resume to get started.
             </p>
-          ) : (            <select
+          ) : (
+            <select
               id="chat-candidate"
               value={selectedResumeId}
               onChange={handleCandidateChange}
@@ -206,9 +244,7 @@ export default function ResumeChat() {
             <p className="mt-2 text-xs text-slate-500">
               {selectedCandidate.email ?? "No email on file"}
               {" · "}
-              <span className="font-mono">
-                {selectedCandidate.resumeId.slice(0, 8)}…
-              </span>
+              <span className="font-mono">{selectedCandidate.resumeId.slice(0, 8)}…</span>
             </p>
           ) : null}
         </div>
@@ -226,7 +262,8 @@ export default function ResumeChat() {
         ) : null}
       </div>
 
-      <div className="flex h-[420px] flex-col rounded-lg border border-slate-800 bg-slate-950/60">
+      {/* Chat box — grows to fill available height when maximized */}
+      <div className={`flex flex-col rounded-lg border border-slate-800 bg-slate-950/60 ${maximized ? "min-h-0 flex-1" : "h-[420px]"}`}>
         <div className="flex-1 space-y-4 overflow-y-auto p-4">
           {messages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center px-4 text-center">
@@ -275,7 +312,7 @@ export default function ResumeChat() {
               {messages.map((message) => (
                 <div
                   key={message.id}
-                  className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                  className={`flex flex-col ${message.role === "user" ? "items-end" : "items-start"}`}
                 >
                   <div
                     className={`max-w-[85%] rounded-2xl px-4 py-2.5 ${
@@ -289,9 +326,7 @@ export default function ResumeChat() {
                     </p>
                     <p
                       className={`mt-1.5 text-[10px] ${
-                        message.role === "user"
-                          ? "text-blue-200/70"
-                          : "text-slate-500"
+                        message.role === "user" ? "text-blue-200/70" : "text-slate-500"
                       }`}
                     >
                       {message.timestamp.toLocaleTimeString([], {
@@ -300,6 +335,9 @@ export default function ResumeChat() {
                       })}
                     </p>
                   </div>
+                  {message.role === "assistant" && message.chain ? (
+                    <PromptChainSteps chain={message.chain} sources={message.sources} />
+                  ) : null}
                 </div>
               ))}
 
@@ -363,6 +401,52 @@ export default function ResumeChat() {
           </p>
         </form>
       </div>
-    </ResultCard>
+    </>
+  );
+
+  // Maximized: full-screen overlay
+  if (maximized) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-slate-950 p-6">
+        <div className="mb-4 flex shrink-0 items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+            Resume Chat
+          </h2>
+          <button
+            type="button"
+            onClick={() => setMaximized(false)}
+            className="flex items-center gap-1.5 rounded-md border border-slate-700 px-2.5 py-1.5 text-xs text-slate-400 transition-colors hover:border-slate-500 hover:text-slate-200"
+            aria-label="Minimize chat"
+          >
+            <MinimizeIcon />
+            Minimize
+          </button>
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col text-sm leading-relaxed text-slate-300">
+          {inner}
+        </div>
+      </div>
+    );
+  }
+
+  // Normal card view with maximize button in header
+  return (
+    <section className="rounded-xl border border-slate-800 bg-slate-900 p-6 shadow-lg shadow-black/20">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+          Resume Chat
+        </h2>
+        <button
+          type="button"
+          onClick={() => setMaximized(true)}
+          className="flex items-center gap-1.5 rounded-md border border-slate-700 px-2.5 py-1.5 text-xs text-slate-400 transition-colors hover:border-slate-500 hover:text-slate-200"
+          aria-label="Maximize chat"
+        >
+          <MaximizeIcon />
+          Maximize
+        </button>
+      </div>
+      <div className="text-sm leading-relaxed text-slate-300">{inner}</div>
+    </section>
   );
 }

@@ -51,6 +51,35 @@ export type ChatMessage = {
   role: ChatRole;
   content: string;
   timestamp: Date;
+  chain?: QueryChainTrace;
+  sources?: SearchHit[];
+};
+
+export type QueryUnderstanding = {
+  search_query: string;
+  intent: "factual" | "jd_fit" | "summary" | "other";
+};
+
+export type QueryEvidence = {
+  key_facts: string[];
+  matches: string[];
+  gaps: string[];
+  jd_fit: "strong" | "partial" | "weak" | "unknown" | null;
+  insufficient_context: boolean;
+};
+
+export type QueryChainTrace = {
+  step1_understanding: QueryUnderstanding;
+  retrieval_chunk_count: number;
+  step2_evidence: QueryEvidence;
+};
+
+export type QueryResult = {
+  resume_id: string;
+  query: string;
+  answer: string;
+  sources: SearchHit[];
+  chain: QueryChainTrace;
 };
 
 export type ChatCandidate = {
