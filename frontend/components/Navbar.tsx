@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const NAV_ITEMS = [
   { href: "/", label: "Upload" },
   { href: "/chat", label: "Chat" },
+  { href: "/agent-chat", label: "Agentic AI" },
 ];
 
 export default function Navbar() {

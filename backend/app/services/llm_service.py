@@ -1,5 +1,6 @@
 import json
 
+from langfuse import observe
 from pydantic import BaseModel
 
 from app.lib.azure_openai import get_azure_openai_client
@@ -20,7 +21,7 @@ Return JSON with these fields:
 Use null for any field that cannot be determined from the resume."""
 
 
-def _chat_text(system: str, user: str) -> str:
+def _chat_text(system: str, user: str, *, generation_name: str) -> str:
     client = get_azure_openai_client()
     response = client.chat.completions.create(
         model=settings.azure_openai_deployment_name,
@@ -28,6 +29,7 @@ def _chat_text(system: str, user: str) -> str:
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
+        name=generation_name,
     )
     content = response.choices[0].message.content
     if not content:
@@ -35,9 +37,45 @@ def _chat_text(system: str, user: str) -> str:
     return content.strip()
 
 
-def _chat_json(system: str, user: str, model: type[BaseModel]) -> BaseModel:
+def _prepare_strict_json_schema(schema: dict) -> dict:
+    """Adapt a Pydantic JSON schema for OpenAI/Azure strict structured output."""
+    schema = json.loads(json.dumps(schema))
+
+    def patch(node: dict) -> None:
+        if not isinstance(node, dict):
+            return
+        if "properties" in node:
+            node["additionalProperties"] = False
+            node["required"] = list(node["properties"].keys())
+            for prop in node["properties"].values():
+                if isinstance(prop, dict):
+                    prop.pop("default", None)
+                    patch(prop)
+        defs = node.get("$defs")
+        if defs:
+            for defn in defs.values():
+                patch(defn)
+        for key in ("items", "anyOf", "allOf", "oneOf"):
+            val = node.get(key)
+            if isinstance(val, list):
+                for item in val:
+                    patch(item)
+            elif isinstance(val, dict):
+                patch(val)
+
+    patch(schema)
+    return schema
+
+
+def _chat_json(
+    system: str,
+    user: str,
+    model: type[BaseModel],
+    *,
+    generation_name: str,
+) -> BaseModel:
     client = get_azure_openai_client()
-    schema = model.model_json_schema()
+    schema = _prepare_strict_json_schema(model.model_json_schema())
 
     try:
         response = client.chat.completions.create(
@@ -54,6 +92,7 @@ def _chat_json(system: str, user: str, model: type[BaseModel]) -> BaseModel:
                     "strict": True,
                 },
             },
+            name=generation_name,
         )
     except Exception:
         response = client.chat.completions.create(
@@ -63,6 +102,7 @@ def _chat_json(system: str, user: str, model: type[BaseModel]) -> BaseModel:
                 {"role": "user", "content": user + "\n\nRespond with JSON only."},
             ],
             response_format={"type": "json_object"},
+            name=f"{generation_name}_fallback",
         )
 
     content = response.choices[0].message.content
@@ -83,6 +123,7 @@ def extract_user_profile(resume_text: str) -> UserProfileExtraction:
         SYSTEM_PROMPT,
         resume_text,
         UserProfileExtraction,
+        generation_name="extract_user_profile",
     )
 
     log_event(
@@ -110,6 +151,7 @@ Use factual for specific facts (email, skills, years, companies).
 Use summary for broad overview requests."""
 
 
+@observe()
 def understand_query(
     query: str,
     *,
@@ -126,6 +168,7 @@ def understand_query(
         UNDERSTAND_QUERY_PROMPT,
         "\n\n".join(user_parts),
         QueryUnderstanding,
+        generation_name="chain_understand_query",
     )
 
     if not understanding.search_query.strip():
@@ -153,6 +196,7 @@ Return JSON with:
 - insufficient_context: true if excerpts do not contain enough to answer"""
 
 
+@observe()
 def analyze_evidence(
     query: str,
     hits: list[str],
@@ -190,6 +234,7 @@ def analyze_evidence(
         ANALYZE_EVIDENCE_PROMPT,
         "\n\n".join(user_parts),
         QueryEvidence,
+        generation_name="chain_analyze_evidence",
     )
 
     log_event(
@@ -211,6 +256,7 @@ Be concise, factual, and write in complete sentences.
 If insufficient_context is true, say you do not have enough information from the resume."""
 
 
+@observe()
 def synthesize_answer(
     query: str,
     evidence: QueryEvidence,
@@ -228,6 +274,7 @@ def synthesize_answer(
             f"User question:\n{query}\n\n"
             f"Structured evidence:\n{evidence.model_dump_json(indent=2)}"
         ),
+        generation_name="chain_synthesize_answer",
     )
 
     log_event(logger, "llm.chain.step3.completed", answer_length=len(answer))

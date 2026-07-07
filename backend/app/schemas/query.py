@@ -43,3 +43,18 @@ class QueryResult(BaseModel):
     answer: str
     sources: list[SearchHitSchema]
     chain: QueryChainTrace
+
+
+class AgentToolCall(BaseModel):
+    """One tool call the agent decided to make, whichever tool it was."""
+
+    tool_name: str
+    arguments: dict
+    result_summary: str
+
+
+class AgentQueryResult(BaseModel):
+    resume_id: str
+    query: str
+    answer: str
+    tool_calls: list[AgentToolCall]

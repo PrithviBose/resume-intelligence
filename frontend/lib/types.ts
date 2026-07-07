@@ -53,6 +53,7 @@ export type ChatMessage = {
   timestamp: Date;
   chain?: QueryChainTrace;
   sources?: SearchHit[];
+  toolCalls?: AgentToolCall[];
 };
 
 export type QueryUnderstanding = {
@@ -80,6 +81,19 @@ export type QueryResult = {
   answer: string;
   sources: SearchHit[];
   chain: QueryChainTrace;
+};
+
+export type AgentToolCall = {
+  tool_name: string;
+  arguments: Record<string, unknown>;
+  result_summary: string;
+};
+
+export type AgentQueryResult = {
+  resume_id: string;
+  query: string;
+  answer: string;
+  tool_calls: AgentToolCall[];
 };
 
 export type ChatCandidate = {

@@ -36,6 +36,10 @@ def create_user(
     return _to_schema(user)
 
 
+def get_user_by_resume_id(db: Session, resume_id: str) -> User | None:
+    return db.query(User).filter(User.resume_id == resume_id).first()
+
+
 def list_users(db: Session) -> list[UserListItem]:
     rows = (
         db.query(User)

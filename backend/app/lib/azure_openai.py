@@ -1,6 +1,11 @@
-from openai import AzureOpenAI
+from langfuse.openai import AzureOpenAI
 
 from app.lib.config import settings
+
+# langfuse.openai.AzureOpenAI is a drop-in replacement for openai.AzureOpenAI:
+# every chat completion call is automatically captured as a "generation" in
+# Langfuse (input, output, tokens, latency, cost) with no other code changes.
+# If LANGFUSE_* env vars are unset, tracing is a no-op and calls behave normally.
 
 _client: AzureOpenAI | None = None
 

@@ -1,12 +1,14 @@
+import time
 import uuid
 from dataclasses import dataclass
+
+from langfuse import observe
 
 from app.lib.chroma_client import get_collection
 from app.lib.logger import get_logger, log_event
 from app.models.embedding import StoredResume
 from app.services.chunking_service import TextChunk
 from app.services.embedding_service import embed_query
-
 logger = get_logger(__name__)
 
 
@@ -80,19 +82,42 @@ class ChromaEmbeddingStore:
             chunks=[],
         )
 
-    def search(self, resume_id: str, query: str, top_k: int = 3) -> list[SearchHit]:
-        if self.get(resume_id) is None:
-            return []
-
-        collection = get_collection()
-        query_vector = embed_query(query)
-        results = collection.query(
+    @observe(name="chroma_query")
+    def _query_chunks(
+        self,
+        collection,
+        query_vector: list[float],
+        resume_id: str,
+        top_k: int,
+    ):
+        return collection.query(
             query_embeddings=[query_vector],
             n_results=top_k,
             where={"resume_id": resume_id},
             include=["documents", "metadatas", "distances"],
         )
 
+    @observe(name="vector_search")
+    def search(self, resume_id: str, query: str, top_k: int = 3) -> list[SearchHit]:
+        collection = get_collection()
+
+        embed_start = time.perf_counter()
+        query_vector = embed_query(query)
+        embed_ms = round((time.perf_counter() - embed_start) * 1000, 2)
+
+        chroma_start = time.perf_counter()
+        results = self._query_chunks(collection, query_vector, resume_id, top_k)
+        chroma_ms = round((time.perf_counter() - chroma_start) * 1000, 2)
+
+        log_event(
+            logger,
+            "retrieval.search.completed",
+            resume_id=resume_id,
+            top_k=top_k,
+            hit_count=len(results["documents"][0]) if results["documents"] else 0,
+            embed_ms=embed_ms,
+            chroma_ms=chroma_ms,
+        )
         hits: list[SearchHit] = []
         documents = results["documents"][0]
         metadatas = results["metadatas"][0]

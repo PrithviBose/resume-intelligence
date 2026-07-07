@@ -1,3 +1,4 @@
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -9,6 +10,7 @@ from app.lib.logger import get_logger, log_event
 from app.middleware.cors import setup_cors
 from app.middleware.request_logging import RequestLoggingMiddleware
 from app.routes import api_router
+from app.services.embedding_service import warmup_embedding_model
 
 configure_logging_from_settings(settings)
 logger = get_logger(__name__)
@@ -26,6 +28,23 @@ async def lifespan(app: FastAPI):
             level=40,
             error=str(exc),
         )
+
+    warmup_start = time.perf_counter()
+    try:
+        warmup_embedding_model()
+        log_event(
+            logger,
+            "embeddings.initialized",
+            duration_ms=round((time.perf_counter() - warmup_start) * 1000, 2),
+        )
+    except Exception as exc:
+        log_event(
+            logger,
+            "embeddings.initialization_failed",
+            level=40,
+            error=str(exc),
+        )
+
     yield
 
 
