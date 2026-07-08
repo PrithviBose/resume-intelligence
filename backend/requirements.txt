@@ -1,5 +1,6 @@
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
+python-dotenv>=1.0.0
 python-multipart>=0.0.12
 sqlalchemy>=2.0.0
 psycopg2-binary>=2.9.0
@@ -8,3 +9,17 @@ python-docx>=1.1.0
 sentence-transformers>=3.0.0
 openai>=1.0.0
 chromadb>=0.5.0
+langfuse>=4.0.0
+httpx>=0.28.0
+
+# --- RAGAS evaluation only (backend/eval/, never imported by the running app) ---
+# NOTE: installing ragas pulls in a large transitive dependency chain (langchain,
+# instructor, opentelemetry, etc.) that overlaps with langfuse's own dependencies.
+# Resolving that chain silently upgraded langfuse past 3.x here — the `>=4.0.0`
+# floor above reflects the actually-tested working combination, not an arbitrary bump.
+ragas>=0.3.9,<0.4.0
+# Pinned: `import ragas` transitively imports langchain_community.chat_models.vertexai
+# at package-init time (regardless of which provider you actually use). langchain-community
+# >=0.4 reorganized that module and dropped it, which breaks the `ragas` import entirely.
+# Keep this pin until a ragas release fixes that internal import.
+langchain-community==0.3.31

@@ -1,0 +1,38 @@
+{
+  "_instructions": [
+    "This file is the 'golden set' — a small, hand-curated set of questions plus the correct reference answer for ONE test resume, used to measure RAG quality (see docs/progress.html, RAGAS Evaluation section).",
+    "1. Upload a real test resume through the app, then find its resume_id via GET /api/users (the same call the chat UI makes).",
+    "2. Replace 'resume_id' below with that value.",
+    "3. Replace every 'reference' string with the ACTUAL correct answer for that resume, written by you. RAGAS compares the pipeline's real answer against this reference for context_precision/context_recall, so it must be accurate, not a placeholder.",
+    "4. Add/remove/edit questions freely — these six are generic starting categories, not a required set.",
+    "Fields starting with an underscore (like this one) are ignored by run_ragas_eval.py — they're documentation only."
+  ],
+  "resume_id": "39202af5-99e3-4802-8ea9-bc84e2778d71",
+  "top_k": 3,
+  "questions": [
+    {
+      "question": "What is the candidate's total years of professional experience?",
+      "reference": "The candidate, Prithvi Bose, has a total of 6.5 years of professional experience."
+    },
+    {
+      "question": "What programming languages and core technical skills does the candidate have?",
+      "reference": "The candidate Prithvi Bose's core technical skills and programming languages include: Programming Languages - JavaScript, TypeScript, Python; Backend - Node.js, Express.js, REST APIs, Microservices, Socket.io; Frontend - Angular 2+, React, RxJS, Angular Material, Next.js; Databases - MongoDB, MySQL (indexing, query tuning); Infrastructure and Tools - Redis, Docker, CI/CD, Git, caching; AI/LLMs - Prompt engineering, LLM-based feature integration, RAG-based workflows, Flowise. He has strong experience in building and scaling production systems with a focus on performance, reliability, and backend efficiency."
+    },
+    {
+      "question": "Where did the candidate most recently work, and in what role?",
+      "reference": "The candidate, Prithvi Bose, most recently worked at PEGASUS INFOCORP PVT LTD as a Senior Software Engineer."
+    },
+    {
+      "question": "What is the candidate's educational background?",
+      "reference": "The candidate Prithvi Bose has the following educational background: Master's of Computer Applications (MCA) from Vivekanand Education Society's Institute Of Technology, Mumbai, Maharashtra (Aug 2017 - Jun 2020), where he ranked third in the first year of the program; and a Bachelor's in Computer Science from Thakur College of Science and Commerce, Mumbai, Maharashtra (Jun 2013 - Jun 2016)."
+    },
+    {
+      "question": "Has the candidate worked on any notable projects? Briefly describe one.",
+      "reference": "The candidate worked on the notable project Pulse - Employee Training & Strategy Alignment Platform, where they built major authoring and user modules, integrated a standalone Isomers app using micro frontends, and architected a real-time layer with Socket.io and Redis to transmit live user progress and ensure consistency."
+    },
+    {
+      "question": "Does the candidate have experience with any cloud platforms such as AWS, Azure, or GCP?",
+      "reference": "The candidate, Prithvi Bose, does not explicitly mention experience with cloud platforms such as AWS, Azure, or GCP in the resume excerpts found. The resume highlights skills and experience in backend and frontend development, databases, infrastructure and tools like Redis, Docker, CI/CD, but no direct reference to cloud platforms."
+    }
+  ]
+}
